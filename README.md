@@ -1,123 +1,171 @@
-import random
-import textwrap
+from flask import Flask, render_template_string, request, jsonify
+import datetime
 
-# -----------------------------
-# Simple AI Chatbot Assistant
-# -----------------------------
+app = Flask(__name__)
 
-BOT_NAME = "Assistant"
+# ---------- Simple intent-based response logic ----------
 
-def wrap(text, width=80):
-    return "\n".join(textwrap.wrap(text, width=width))
+def get_bot_response(user_message: str) -> str:
+    msg = user_message.lower().strip()
 
-def get_small_talk_response(user):
-    if any(word in user for word in ["hi", "hello", "hey"]):
-        return random.choice([
-            "Hi! 👋 How can I help you today?",
-            "Hello! What can I do for you?",
-            "Hey! Need any help?"
-        ])
+    if msg in ("hi", "hello", "hey", "hii", "hallo"):
+        return "Hello! 👋 I’m your AI assistant. How can I help you today?"
 
-    if "how are you" in user:
-        return random.choice([
-            "I'm just code, but I'm running fine 😄 How about you?",
-            "Doing great and ready to help! How are you?"
-        ])
+    if "time" in msg:
+        now = datetime.datetime.now().strftime("%H:%M:%S")
+        return f"Right now the time is {now}."
 
-    if "your name" in user:
-        return f"My name is {BOT_NAME}. I'm your AI assistant 🤖."
+    if "date" in msg or "day" in msg:
+        today = datetime.datetime.now().strftime("%d-%m-%Y (%A)")
+        return f"Today is {today}."
 
-    return None
+    if "your name" in msg:
+        return "I’m a simple AI chatbot assistant written in Python 🐍."
 
-def get_help_response(user):
-    if "help" in user or "what can you do" in user:
+    if "help" in msg:
         return (
-            "I can answer general questions, explain concepts, help with basic programming, "
-            "and chat with you. Try asking:\n"
-            "- \"Explain AI in simple words\"\n"
-            "- \"Help me with a Python if-else example\"\n"
-            "- \"Give me tips to study better\""
-        )
-    return None
-
-def get_programming_response(user):
-    if "python" in user and ("example" in user or "code" in user):
-        return (
-            "Here is a simple Python if-else example:\n\n"
-            "x = 10\n"
-            "if x > 5:\n"
-            "    print(\"x is greater than 5\")\n"
-            "else:\n"
-            "    print(\"x is 5 or less\")"
+            "I can tell you the time, date, reply to greetings, "
+            "and answer simple questions. Try asking: 'what's the time?'"
         )
 
-    if "reverse a string" in user and "python" in user:
-        return (
-            "To reverse a string in Python:\n\n"
-            "s = \"hello\"\n"
-            "reversed_s = s[::-1]\n"
-            "print(reversed_s)  # olleh"
-        )
-
-    return None
-
-def get_study_response(user):
-    if "study" in user or "exam" in user or "learn" in user:
-        return (
-            "Here are some study tips:\n"
-            "1) Set small goals (e.g. 25–30 minutes focused study).\n"
-            "2) Remove distractions (mobile, notifications).\n"
-            "3) After studying, write a short summary in your own words.\n"
-            "4) Practice questions instead of only reading.\n"
-            "5) Teach the topic to someone else (or pretend to)."
-        )
-    return None
-
-def fallback_response(user):
+    # Default fallback
     return (
-        "I'm not fully sure about that yet 😅\n"
-        "Try asking me to explain a concept, help with some code, "
-        "or give tips about studying or productivity."
+        "I'm not sure about that yet 🤔. "
+        "Try asking me about the time, date, or just say 'hello'."
     )
 
-def get_response(user_input: str) -> str:
-    user = user_input.lower().strip()
 
-    # 1. Small talk
-    resp = get_small_talk_response(user)
-    if resp:
-        return resp
+# ---------- Simple HTML UI using template_string ----------
 
-    # 2. Help / capabilities
-    resp = get_help_response(user)
-    if resp:
-        return resp
+CHAT_HTML = """
+<!doctype html>
+<html>
+<head>
+    <title>AI Chatbot Assistant</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background: #f4f4f4;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+        }
+        .chat-container {
+            width: 400px;
+            background: white;
+            border-radius: 10px;
+            box-shadow: 0 0 10px rgba(0,0,0,0.1);
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+        .chat-header {
+            background: #4a6cf7;
+            color: white;
+            padding: 10px 15px;
+            font-weight: bold;
+        }
+        .chat-messages {
+            flex: 1;
+            padding: 10px;
+            overflow-y: auto;
+            font-size: 14px;
+        }
+        .message {
+            margin-bottom: 8px;
+            max-width: 80%;
+            padding: 6px 10px;
+            border-radius: 12px;
+            clear: both;
+        }
+        .user {
+            background: #e1f5fe;
+            margin-left: auto;
+        }
+        .bot {
+            background: #eeeeee;
+            margin-right: auto;
+        }
+        .chat-input-area {
+            display: flex;
+            border-top: 1px solid #ddd;
+        }
+        .chat-input-area input {
+            flex: 1;
+            border: none;
+            padding: 10px;
+            font-size: 14px;
+            outline: none;
+        }
+        .chat-input-area button {
+            border: none;
+            padding: 0 15px;
+            cursor: pointer;
+            background: #4a6cf7;
+            color: white;
+            font-weight: bold;
+        }
+    </style>
+</head>
+<body>
+<div class="chat-container">
+    <div class="chat-header">AI Chatbot Assistant</div>
+    <div id="messages" class="chat-messages">
+        <div class="message bot">
+            Hello! 👋 I’m your AI assistant. Ask me something!
+        </div>
+    </div>
+    <div class="chat-input-area">
+        <input id="userInput" type="text" placeholder="Type your message..." onkeydown="if(event.key==='Enter'){sendMessage();}">
+        <button onclick="sendMessage()">Send</button>
+    </div>
+</div>
 
-    # 3. Programming-related
-    resp = get_programming_response(user)
-    if resp:
-        return resp
+<script>
+    async function sendMessage() {
+        const input = document.getElementById('userInput');
+        const text = input.value.trim();
+        if (!text) return;
 
-    # 4. Study / exam tips
-    resp = get_study_response(user)
-    if resp:
-        return resp
+        addMessage(text, 'user');
+        input.value = '';
 
-    # 5. Fallback
-    return fallback_response(user)
+        const res = await fetch('/chat', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({message: text})
+        });
 
-def main():
-    print(f"{BOT_NAME}: Hi! I'm your AI chatbot assistant. Type 'quit' to exit.\n")
+        const data = await res.json();
+        addMessage(data.reply, 'bot');
+    }
 
-    while True:
-        user_input = input("You: ")
-        if user_input.strip().lower() in ["quit", "exit", "bye"]:
-            print(f"{BOT_NAME}: Bye! Have a great day 👋")
-            break
+    function addMessage(text, sender) {
+        const messages = document.getElementById('messages');
+        const div = document.createElement('div');
+        div.className = 'message ' + sender;
+        div.innerText = text;
+        messages.appendChild(div);
+        messages.scrollTop = messages.scrollHeight;
+    }
+</script>
+</body>
+</html>
+"""
 
-        bot_reply = get_response(user_input)
-        print(f"{BOT_NAME}: {wrap(bot_reply)}\n")
+@app.route("/")
+def index():
+    return render_template_string(CHAT_HTML)
+
+@app.route("/chat", methods=["POST"])
+def chat():
+    data = request.get_json()
+    user_message = data.get("message", "")
+    bot_reply = get_bot_response(user_message)
+    return jsonify({"reply": bot_reply})
 
 if __name__ == "__main__":
-    main()
-# AI-CHATBOT
+    app.run(debug=True)
+    
